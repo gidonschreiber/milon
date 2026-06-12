@@ -303,28 +303,134 @@ function speak(text, onDone) {
 }
 
 /* ---------- Speech recognition ---------- */
-function listen(lang, { onResult, onMiss, timeout }) {
+// Home-screen ("standalone") web apps on iPadOS can't use Apple's recognition
+// service, so there we record audio and transcribe via OpenAI instead.
+const isStandalone = window.navigator.standalone === true ||
+  (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+let useCloudSTT = localStorage.getItem('milon_stt') === 'cloud' || isStandalone;
+let sttModel = 'gpt-4o-mini-transcribe';
+let audioCtx = null;
+
+function ensureAudioCtx() {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  if (!audioCtx) audioCtx = new AC();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+
+function listen(lang, opts) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { setStatus('הדפדפן לא תומך בזיהוי דיבור — נסי בספארי', 'error'); reset(); return; }
+  if (useCloudSTT || !SR) { cloudListen(lang, opts); return; }
+  nativeListen(SR, lang, opts);
+}
+
+function nativeListen(SR, lang, opts) {
+  const { onResult, onMiss, timeout } = opts;
   const rec = new SR();
-  activeRec = rec;
+  let got = false, switched = false, timer = null;
+  activeRec = { abort() { got = true; try { rec.abort(); } catch (e) {} } };
   rec.lang = lang;
   rec.interimResults = false;
   rec.maxAlternatives = 1;
-  let got = false, timer = null;
   rec.onresult = e => {
     got = true;
     clearTimeout(timer);
+    activeRec = null;
     onResult(e.results[0][0].transcript || '');
+  };
+  rec.onerror = e => {
+    if (!got && (e.error === 'service-not-allowed' || e.error === 'audio-capture' || e.error === 'network')) {
+      switched = true;
+      useCloudSTT = true;
+      localStorage.setItem('milon_stt', 'cloud');
+      clearTimeout(timer);
+      cloudListen(lang, opts);
+    }
   };
   rec.onend = () => {
     clearTimeout(timer);
-    activeRec = null;
-    if (!got && onMiss) onMiss();
+    if (!got && !switched) { activeRec = null; onMiss && onMiss(); }
   };
-  rec.onerror = () => {}; // onend fires afterwards either way
   try { rec.start(); } catch (e) {}
   if (timeout) timer = setTimeout(() => { try { rec.stop(); } catch (e) {} }, timeout);
+}
+
+async function cloudListen(lang, { onResult, onMiss, timeout }) {
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (e) {
+    setStatus('אין גישה למיקרופון — אשרי גישה למיקרופון ונסי שוב', 'error');
+    state = 'idle';
+    setMic('');
+    return;
+  }
+  const mime = MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4'
+             : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
+  const mr = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+  const chunks = [];
+  let aborted = false, spoke = false, vadActive = false;
+  const timers = [];
+  const cleanup = () => { timers.forEach(clearTimeout); stream.getTracks().forEach(t => t.stop()); };
+  activeRec = { abort() { aborted = true; try { mr.stop(); } catch (e) {} } };
+
+  mr.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+  mr.onstop = async () => {
+    cleanup();
+    activeRec = null;
+    if (aborted) return;
+    if (vadActive && !spoke) { onMiss && onMiss(); return; } // silence only — don't transcribe
+    const blob = new Blob(chunks, { type: mime || 'audio/mp4' });
+    if (blob.size < 1500) { onMiss && onMiss(); return; }
+    try {
+      const text = (await transcribe(blob, lang, mime)).trim();
+      text ? onResult(text) : (onMiss && onMiss());
+    } catch (e) {
+      setStatus(e.message, 'error');
+      state = 'idle';
+      setMic('');
+    }
+  };
+  mr.start();
+
+  // stop ~1s after she finishes speaking (when the audio level allows), else at timeout
+  ensureAudioCtx();
+  if (audioCtx && audioCtx.state === 'running') {
+    vadActive = true;
+    const src = audioCtx.createMediaStreamSource(stream);
+    const an = audioCtx.createAnalyser();
+    an.fftSize = 1024;
+    src.connect(an);
+    const buf = new Uint8Array(an.fftSize);
+    let silentMs = 0;
+    timers.push(setInterval(() => {
+      an.getByteTimeDomainData(buf);
+      let sum = 0;
+      for (let i = 0; i < buf.length; i++) { const d = (buf[i] - 128) / 128; sum += d * d; }
+      if (Math.sqrt(sum / buf.length) > 0.02) { spoke = true; silentMs = 0; }
+      else if (spoke && (silentMs += 100) >= 1000) { try { mr.stop(); } catch (e) {} }
+    }, 100));
+  }
+  timers.push(setTimeout(() => { try { mr.stop(); } catch (e) {} }, timeout || 7000));
+}
+
+async function transcribe(blob, lang, mime) {
+  const post = m => {
+    const fd = new FormData();
+    fd.append('file', blob, 'audio.' + ((mime || '').includes('webm') ? 'webm' : 'mp4'));
+    fd.append('model', m);
+    fd.append('language', lang.slice(0, 2));
+    return fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + apiKey },
+      body: fd
+    });
+  };
+  let r = await post(sttModel);
+  if (!r.ok && sttModel !== 'whisper-1') { sttModel = 'whisper-1'; r = await post(sttModel); }
+  if (r.status === 401) throw new Error('מפתח API לא תקין — בדקי בהגדרות');
+  if (!r.ok) throw new Error('שגיאת תמלול (' + r.status + ')');
+  return (await r.json()).text || '';
 }
 
 function stopListening() {
@@ -381,6 +487,7 @@ micBtn.addEventListener('click', () => {
   if (!apiKey) { openSettings(); return; }
   if (state !== 'idle') { speechSynthesis.cancel(); reset(); return; }
   unlockTTS();
+  ensureAudioCtx(); // must happen inside the tap gesture for iOS
   englishEl.textContent = '';
   hebrewEl.textContent = '';
   explEl.className = '';
