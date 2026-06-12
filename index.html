@@ -4,30 +4,43 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<title>מילון קולי</title>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Einav's Partner</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; }
   body {
     font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
-    background: #f7f6f3;
-    color: #1c1b18;
+    background: radial-gradient(ellipse 120% 90% at 50% 30%, #131b3a 0%, #0a0e22 55%, #05060f 100%);
+    color: #eef1ff;
     display: flex;
     flex-direction: column;
     align-items: center;
     min-height: 100%;
-    padding: max(20px, env(safe-area-inset-top)) 24px 40px;
+    padding: max(24px, env(safe-area-inset-top)) 24px 40px;
   }
   header {
     width: 100%;
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
+    position: relative;
   }
-  header h1 { font-size: 17px; font-weight: 600; color: #8a8578; letter-spacing: 0.5px; }
+  header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    direction: ltr;
+    background: linear-gradient(90deg, #5cc8ff 0%, #a06bff 55%, #ffb27a 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 0 30px rgba(120, 110, 255, 0.35);
+  }
   #gear {
-    background: none; border: none; font-size: 22px; color: #b5b0a3;
+    position: absolute;
+    left: 0;
+    background: none; border: none; font-size: 22px; color: #4a5380;
     cursor: pointer; padding: 8px;
   }
 
@@ -39,107 +52,156 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 28px;
+    gap: 30px;
     text-align: center;
   }
 
   #english {
     font-size: 26px;
-    color: #8a8578;
+    color: #7d88b8;
     min-height: 32px;
     direction: ltr;
+    letter-spacing: 0.5px;
   }
   #hebrew {
     font-size: 64px;
     font-weight: 700;
     min-height: 78px;
     line-height: 1.2;
+    color: #ffffff;
+    text-shadow: 0 0 24px rgba(124, 156, 255, 0.55);
   }
   #explanation {
     font-size: 24px;
     line-height: 1.6;
-    color: #3d3a33;
+    color: #c8d0f2;
     max-width: 480px;
-    background: #fffdf7;
-    border: 1px solid #e8e4d8;
+    background: rgba(38, 48, 96, 0.35);
+    border: 1px solid rgba(130, 150, 255, 0.3);
     border-radius: 16px;
     padding: 18px 22px;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
     display: none;
   }
   #explanation.show { display: block; }
 
-  #micWrap { position: relative; width: 150px; height: 150px; }
-  #mic {
-    width: 150px; height: 150px;
+  /* ---- glowing mic orb ---- */
+  #micWrap { position: relative; width: 230px; height: 230px;
+    display: flex; align-items: center; justify-content: center; }
+
+  #aura {
+    position: absolute; inset: 0;
     border-radius: 50%;
-    border: none;
-    background: #2f6df6;
+    background: conic-gradient(from 0deg,
+      #3fb6ff, #7a5cff, #c45cff, #ff9d5c, #ffce8a, #3fb6ff);
+    filter: blur(26px);
+    opacity: 0.75;
+    animation: spin 9s linear infinite;
+  }
+  #aura2 {
+    position: absolute; inset: 22px;
+    border-radius: 50%;
+    background: conic-gradient(from 180deg,
+      #ff9d5c, #c45cff, #3fb6ff, #7a5cff, #ff9d5c);
+    filter: blur(14px);
+    opacity: 0.55;
+    animation: spin 14s linear infinite reverse;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #mic {
+    position: relative;
+    width: 160px; height: 160px;
+    border-radius: 50%;
+    border: 2px solid rgba(160, 180, 255, 0.45);
+    background: radial-gradient(circle at 50% 38%, #1a2247 0%, #0c1230 70%, #080c22 100%);
     color: #fff;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 8px 24px rgba(47, 109, 246, 0.35);
-    transition: background 0.25s, transform 0.15s;
+    box-shadow: 0 0 40px rgba(110, 120, 255, 0.45),
+                inset 0 0 30px rgba(80, 120, 255, 0.25);
+    transition: transform 0.15s;
   }
   #mic:active { transform: scale(0.95); }
-  #mic svg { width: 60px; height: 60px; }
-  #mic.listening { background: #e0432f; box-shadow: 0 8px 24px rgba(224, 67, 47, 0.4); }
-  #mic.busy { background: #b5b0a3; box-shadow: none; }
+  #mic::before {
+    content: '';
+    position: absolute; inset: 14px;
+    border-radius: 50%;
+    border: 2px solid rgba(150, 170, 255, 0.35);
+  }
+  #mic svg { width: 62px; height: 62px; }
+  #micIconGrad stop:nth-child(1) { stop-color: #5cc8ff; }
+  #micIconGrad stop:nth-child(2) { stop-color: #b07aff; }
+  #micIconGrad stop:nth-child(3) { stop-color: #ffb27a; }
+
+  #micWrap.listening #aura  { opacity: 1;    animation-duration: 3.5s; }
+  #micWrap.listening #aura2 { opacity: 0.85; animation-duration: 5s; }
+  #micWrap.listening #mic   { border-color: rgba(255, 160, 120, 0.7);
+    box-shadow: 0 0 60px rgba(196, 92, 255, 0.65), inset 0 0 36px rgba(140, 100, 255, 0.35); }
+  #micWrap.busy #aura, #micWrap.busy #aura2 { opacity: 0.25; }
+  #micWrap.busy #mic { box-shadow: 0 0 18px rgba(110, 120, 255, 0.25); }
 
   .pulse {
-    position: absolute; inset: 0;
+    position: absolute; inset: 28px;
     border-radius: 50%;
-    border: 3px solid #e0432f;
+    border: 3px solid rgba(196, 130, 255, 0.8);
     opacity: 0;
     pointer-events: none;
   }
-  #mic.listening ~ .pulse { animation: pulse 1.6s ease-out infinite; }
+  #micWrap.listening .pulse { animation: pulse 1.6s ease-out infinite; }
   @keyframes pulse {
-    0%   { transform: scale(1);   opacity: 0.7; }
-    100% { transform: scale(1.5); opacity: 0; }
+    0%   { transform: scale(1);    opacity: 0.8; }
+    100% { transform: scale(1.45); opacity: 0; }
   }
 
   #status {
     font-size: 20px;
-    color: #8a8578;
+    color: #7d88b8;
     min-height: 28px;
   }
-  #status.hint { color: #2f6df6; font-weight: 600; }
-  #status.error { color: #e0432f; }
+  #status.hint { color: #8fd0ff; font-weight: 600; text-shadow: 0 0 16px rgba(90, 180, 255, 0.4); }
+  #status.error { color: #ff8a7a; }
 
   /* settings panel */
   #settings {
     display: none;
     position: fixed; inset: 0;
-    background: rgba(28, 27, 24, 0.45);
+    background: rgba(4, 6, 16, 0.7);
     align-items: center; justify-content: center;
     padding: 24px;
     z-index: 10;
   }
   #settings.show { display: flex; }
   #settingsCard {
-    background: #fff;
+    background: #121838;
+    border: 1px solid rgba(130, 150, 255, 0.3);
     border-radius: 18px;
     padding: 26px;
     width: 100%; max-width: 420px;
     display: flex; flex-direction: column; gap: 14px;
+    box-shadow: 0 0 60px rgba(110, 120, 255, 0.25);
   }
-  #settingsCard h2 { font-size: 19px; }
-  #settingsCard label { font-size: 14px; color: #8a8578; }
+  #settingsCard h2 { font-size: 19px; color: #eef1ff; }
+  #settingsCard label { font-size: 14px; color: #7d88b8; }
   #settingsCard input {
     width: 100%;
     font-size: 16px;
     padding: 12px;
-    border: 1px solid #d9d4c7;
+    border: 1px solid rgba(130, 150, 255, 0.35);
     border-radius: 10px;
     direction: ltr;
+    background: #0a0f28;
+    color: #eef1ff;
   }
   #settingsCard button {
     font-size: 17px; font-weight: 600;
     padding: 13px;
     border: none; border-radius: 10px;
-    background: #2f6df6; color: #fff;
+    background: linear-gradient(90deg, #3f7bff, #8c5cff);
+    color: #fff;
     cursor: pointer;
   }
 </style>
@@ -147,8 +209,8 @@
 <body>
 
 <header>
-  <h1>מילון קולי</h1>
   <button id="gear" aria-label="הגדרות">⚙︎</button>
+  <h1>Einav's Partner</h1>
 </header>
 
 <div id="stage">
@@ -156,10 +218,19 @@
   <div id="hebrew"></div>
   <div id="explanation"></div>
   <div id="micWrap">
+    <div id="aura"></div>
+    <div id="aura2"></div>
     <button id="mic" aria-label="מיקרופון">
-      <svg viewBox="0 0 24 24" fill="currentColor">
-        <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z"/>
-        <path d="M19 11a1 1 0 1 0-2 0 5 5 0 0 1-10 0 1 1 0 1 0-2 0 7 7 0 0 0 6 6.93V20H8a1 1 0 1 0 0 2h8a1 1 0 1 0 0-2h-3v-2.07A7 7 0 0 0 19 11z"/>
+      <svg viewBox="0 0 24 24">
+        <defs>
+          <linearGradient id="micIconGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%"/><stop offset="55%"/><stop offset="100%"/>
+          </linearGradient>
+        </defs>
+        <g fill="url(#micIconGrad)">
+          <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z"/>
+          <path d="M19 11a1 1 0 1 0-2 0 5 5 0 0 1-10 0 1 1 0 1 0-2 0 7 7 0 0 0 6 6.93V20H8a1 1 0 1 0 0 2h8a1 1 0 1 0 0-2h-3v-2.07A7 7 0 0 0 19 11z"/>
+        </g>
       </svg>
     </button>
     <div class="pulse"></div>
@@ -180,7 +251,7 @@
 
 <script>
 const $ = id => document.getElementById(id);
-const micBtn = $('mic'), statusEl = $('status');
+const micBtn = $('mic'), micWrap = $('micWrap'), statusEl = $('status');
 const englishEl = $('english'), hebrewEl = $('hebrew'), explEl = $('explanation');
 
 const DEFAULT_MODEL = 'gpt-5.4-mini';
@@ -282,7 +353,7 @@ function setStatus(text, cls) {
   statusEl.className = cls || '';
 }
 
-function setMic(cls) { micBtn.className = cls || ''; }
+function setMic(cls) { micWrap.className = cls || ''; }
 
 function reset() {
   stopListening();
