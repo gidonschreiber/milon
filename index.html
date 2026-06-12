@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>מילון קולי</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+    background: #f7f6f3;
+    color: #1c1b18;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100%;
+    padding: max(20px, env(safe-area-inset-top)) 24px 40px;
+  }
+  header {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  header h1 { font-size: 17px; font-weight: 600; color: #8a8578; letter-spacing: 0.5px; }
+  #gear {
+    background: none; border: none; font-size: 22px; color: #b5b0a3;
+    cursor: pointer; padding: 8px;
+  }
+
+  #stage {
+    flex: 1;
+    width: 100%;
+    max-width: 560px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 28px;
+    text-align: center;
+  }
+
+  #english {
+    font-size: 26px;
+    color: #8a8578;
+    min-height: 32px;
+    direction: ltr;
+  }
+  #hebrew {
+    font-size: 64px;
+    font-weight: 700;
+    min-height: 78px;
+    line-height: 1.2;
+  }
+  #explanation {
+    font-size: 24px;
+    line-height: 1.6;
+    color: #3d3a33;
+    max-width: 480px;
+    background: #fffdf7;
+    border: 1px solid #e8e4d8;
+    border-radius: 16px;
+    padding: 18px 22px;
+    display: none;
+  }
+  #explanation.show { display: block; }
+
+  #micWrap { position: relative; width: 150px; height: 150px; }
+  #mic {
+    width: 150px; height: 150px;
+    border-radius: 50%;
+    border: none;
+    background: #2f6df6;
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8px 24px rgba(47, 109, 246, 0.35);
+    transition: background 0.25s, transform 0.15s;
+  }
+  #mic:active { transform: scale(0.95); }
+  #mic svg { width: 60px; height: 60px; }
+  #mic.listening { background: #e0432f; box-shadow: 0 8px 24px rgba(224, 67, 47, 0.4); }
+  #mic.busy { background: #b5b0a3; box-shadow: none; }
+
+  .pulse {
+    position: absolute; inset: 0;
+    border-radius: 50%;
+    border: 3px solid #e0432f;
+    opacity: 0;
+    pointer-events: none;
+  }
+  #mic.listening ~ .pulse { animation: pulse 1.6s ease-out infinite; }
+  @keyframes pulse {
+    0%   { transform: scale(1);   opacity: 0.7; }
+    100% { transform: scale(1.5); opacity: 0; }
+  }
+
+  #status {
+    font-size: 20px;
+    color: #8a8578;
+    min-height: 28px;
+  }
+  #status.hint { color: #2f6df6; font-weight: 600; }
+  #status.error { color: #e0432f; }
+
+  /* settings panel */
+  #settings {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(28, 27, 24, 0.45);
+    align-items: center; justify-content: center;
+    padding: 24px;
+    z-index: 10;
+  }
+  #settings.show { display: flex; }
+  #settingsCard {
+    background: #fff;
+    border-radius: 18px;
+    padding: 26px;
+    width: 100%; max-width: 420px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  #settingsCard h2 { font-size: 19px; }
+  #settingsCard label { font-size: 14px; color: #8a8578; }
+  #settingsCard input {
+    width: 100%;
+    font-size: 16px;
+    padding: 12px;
+    border: 1px solid #d9d4c7;
+    border-radius: 10px;
+    direction: ltr;
+  }
+  #settingsCard button {
+    font-size: 17px; font-weight: 600;
+    padding: 13px;
+    border: none; border-radius: 10px;
+    background: #2f6df6; color: #fff;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>מילון קולי</h1>
+  <button id="gear" aria-label="הגדרות">⚙︎</button>
+</header>
+
+<div id="stage">
+  <div id="english"></div>
+  <div id="hebrew"></div>
+  <div id="explanation"></div>
+  <div id="micWrap">
+    <button id="mic" aria-label="מיקרופון">
+      <svg viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z"/>
+        <path d="M19 11a1 1 0 1 0-2 0 5 5 0 0 1-10 0 1 1 0 1 0-2 0 7 7 0 0 0 6 6.93V20H8a1 1 0 1 0 0 2h8a1 1 0 1 0 0-2h-3v-2.07A7 7 0 0 0 19 11z"/>
+      </svg>
+    </button>
+    <div class="pulse"></div>
+  </div>
+  <div id="status">לחצי על המיקרופון ואמרי מילה באנגלית</div>
+</div>
+
+<div id="settings">
+  <div id="settingsCard">
+    <h2>הגדרות</h2>
+    <label>OpenAI API Key</label>
+    <input id="keyInput" type="password" placeholder="sk-..." autocomplete="off">
+    <label>מודל</label>
+    <input id="modelInput" type="text" autocomplete="off">
+    <button id="saveSettings">שמירה</button>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const micBtn = $('mic'), statusEl = $('status');
+const englishEl = $('english'), hebrewEl = $('hebrew'), explEl = $('explanation');
+
+const DEFAULT_MODEL = 'gpt-5.4-mini';
+let apiKey = localStorage.getItem('milon_key') || '';
+let model  = localStorage.getItem('milon_model') || DEFAULT_MODEL;
+
+let state = 'idle';        // idle | listening | translating | speaking | expand | expanding
+let currentWord = '', currentHebrew = '';
+let activeRec = null;
+
+const SYS_TRANSLATE =
+  'You are an English-Hebrew dictionary. The user says one English word ' +
+  '(it may be slightly mis-transcribed from speech; infer the most likely intended word). ' +
+  'Reply with ONLY the single most accurate Hebrew translation: one Hebrew word, ' +
+  'no niqqud, no punctuation, no explanation, nothing else.';
+
+const SYS_EXPLAIN =
+  'You explain English words to a Hebrew speaker. Given an English word and its Hebrew translation, ' +
+  'reply with one or two short, simple Hebrew sentences that explain the meaning of the word clearly. ' +
+  'Hebrew only, no niqqud, no English.';
+
+/* ---------- TTS ---------- */
+let voicesReady = speechSynthesis.getVoices();
+speechSynthesis.onvoiceschanged = () => { voicesReady = speechSynthesis.getVoices(); };
+
+function unlockTTS() {
+  const u = new SpeechSynthesisUtterance(' ');
+  u.volume = 0;
+  speechSynthesis.speak(u);
+}
+
+function speak(text, onDone) {
+  let finished = false;
+  const done = () => { if (!finished) { finished = true; onDone && onDone(); } };
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'he-IL';
+  const v = voicesReady.find(v => v.lang && v.lang.toLowerCase().startsWith('he'));
+  if (v) u.voice = v;
+  u.rate = 0.95;
+  u.onend = done;
+  u.onerror = done;
+  speechSynthesis.cancel();
+  speechSynthesis.speak(u);
+  // iOS sometimes drops onend — safety fallback scaled to text length
+  setTimeout(done, 1500 + text.length * 130);
+}
+
+/* ---------- Speech recognition ---------- */
+function listen(lang, { onResult, onMiss, timeout }) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { setStatus('הדפדפן לא תומך בזיהוי דיבור — נסי בספארי', 'error'); reset(); return; }
+  const rec = new SR();
+  activeRec = rec;
+  rec.lang = lang;
+  rec.interimResults = false;
+  rec.maxAlternatives = 1;
+  let got = false, timer = null;
+  rec.onresult = e => {
+    got = true;
+    clearTimeout(timer);
+    onResult(e.results[0][0].transcript || '');
+  };
+  rec.onend = () => {
+    clearTimeout(timer);
+    activeRec = null;
+    if (!got && onMiss) onMiss();
+  };
+  rec.onerror = () => {}; // onend fires afterwards either way
+  try { rec.start(); } catch (e) {}
+  if (timeout) timer = setTimeout(() => { try { rec.stop(); } catch (e) {} }, timeout);
+}
+
+function stopListening() {
+  if (activeRec) { try { activeRec.abort(); } catch (e) {} activeRec = null; }
+}
+
+/* ---------- OpenAI ---------- */
+async function ask(system, user, maxTokens) {
+  const call = body => fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+    body: JSON.stringify(body)
+  });
+  const messages = [{ role: 'system', content: system }, { role: 'user', content: user }];
+  let r = await call({ model, messages, max_completion_tokens: maxTokens, reasoning_effort: 'minimal' });
+  if (r.status === 400) {
+    // older / different model families reject these params — retry plain
+    r = await call({ model, messages, max_tokens: maxTokens });
+  }
+  if (r.status === 401) throw new Error('מפתח API לא תקין — בדקי בהגדרות');
+  if (!r.ok) throw new Error('שגיאת API (' + r.status + ')');
+  const j = await r.json();
+  return (j.choices[0].message.content || '').trim();
+}
+
+/* ---------- Flow ---------- */
+function setStatus(text, cls) {
+  statusEl.textContent = text;
+  statusEl.className = cls || '';
+}
+
+function setMic(cls) { micBtn.className = cls || ''; }
+
+function reset() {
+  stopListening();
+  state = 'idle';
+  setMic('');
+  setStatus('לחצי על המיקרופון ואמרי מילה באנגלית');
+}
+
+micBtn.addEventListener('click', () => {
+  if (!apiKey) { openSettings(); return; }
+  if (state !== 'idle') { speechSynthesis.cancel(); reset(); return; }
+  unlockTTS();
+  englishEl.textContent = '';
+  hebrewEl.textContent = '';
+  explEl.className = '';
+  explEl.textContent = '';
+  state = 'listening';
+  setMic('listening');
+  setStatus('מקשיבה... אמרי מילה באנגלית');
+  listen('en-US', {
+    onResult: handleWord,
+    onMiss: () => { if (state === 'listening') reset(); },
+    timeout: 8000
+  });
+});
+
+async function handleWord(text) {
+  currentWord = text.trim();
+  englishEl.textContent = currentWord;
+  state = 'translating';
+  setMic('busy');
+  setStatus('מתרגמת...');
+  try {
+    currentHebrew = await ask(SYS_TRANSLATE, currentWord, 200);
+    hebrewEl.textContent = currentHebrew;
+    state = 'speaking';
+    speak(currentHebrew, startExpandWindow);
+  } catch (e) {
+    setStatus(e.message, 'error');
+    state = 'idle';
+    setMic('');
+  }
+}
+
+function startExpandWindow() {
+  if (state !== 'speaking') return;
+  state = 'expand';
+  setMic('listening');
+  setStatus('להסבר נוסף — אמרי "תפרט"', 'hint');
+  listen('he-IL', {
+    onResult: t => { isTrigger(t) ? doExpand() : reset(); },
+    onMiss: () => { if (state === 'expand') reset(); },
+    timeout: 6000
+  });
+}
+
+function isTrigger(t) {
+  const s = (t || '').toLowerCase();
+  return /תפרט|פרט|הסבר|tefaret|t.?far.?et|ferret/.test(s);
+}
+
+async function doExpand() {
+  state = 'expanding';
+  setMic('busy');
+  setStatus('מכינה הסבר...');
+  try {
+    const expl = await ask(SYS_EXPLAIN,
+      'Word: ' + currentWord + '\nHebrew translation: ' + currentHebrew, 400);
+    explEl.textContent = expl;
+    explEl.className = 'show';
+    setStatus('');
+    speak(expl, reset);
+  } catch (e) {
+    setStatus(e.message, 'error');
+    state = 'idle';
+    setMic('');
+  }
+}
+
+/* ---------- Settings ---------- */
+function openSettings() {
+  $('keyInput').value = apiKey;
+  $('modelInput').value = model;
+  $('settings').className = 'show';
+}
+$('gear').addEventListener('click', openSettings);
+$('saveSettings').addEventListener('click', () => {
+  apiKey = $('keyInput').value.trim();
+  model = $('modelInput').value.trim() || DEFAULT_MODEL;
+  localStorage.setItem('milon_key', apiKey);
+  localStorage.setItem('milon_model', model);
+  $('settings').className = '';
+  if (apiKey) setStatus('לחצי על המיקרופון ואמרי מילה באנגלית');
+});
+$('settings').addEventListener('click', e => {
+  if (e.target === $('settings')) $('settings').className = '';
+});
+
+if (!apiKey) setStatus('לחצי על ⚙︎ והכניסי מפתח API כדי להתחיל', 'hint');
+</script>
+</body>
+</html>
