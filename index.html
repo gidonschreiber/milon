@@ -40,12 +40,13 @@
     -webkit-text-fill-color: transparent;
     text-shadow: 0 0 30px rgba(120, 110, 255, 0.35);
   }
-  #gear {
+  #gear, #book {
     position: absolute;
-    left: 0;
     background: none; border: none; font-size: 22px; color: #4a5380;
     cursor: pointer; padding: 8px;
   }
+  #gear { left: 0; }
+  #book { right: 0; font-size: 24px; }
 
   #stage {
     flex: 1;
@@ -176,8 +177,8 @@
     word-break: break-word;
   }
 
-  /* settings panel */
-  #settings {
+  /* overlay panels */
+  #settings, #history {
     display: none;
     position: fixed; inset: 0;
     background: rgba(4, 6, 16, 0.7);
@@ -185,7 +186,43 @@
     padding: 24px;
     z-index: 10;
   }
-  #settings.show { display: flex; }
+  #settings.show, #history.show { display: flex; }
+  #historyCard {
+    background: #121838;
+    border: 1px solid rgba(130, 150, 255, 0.3);
+    border-radius: 18px;
+    padding: 26px;
+    width: 100%; max-width: 440px;
+    display: flex; flex-direction: column; gap: 16px;
+    box-shadow: 0 0 60px rgba(110, 120, 255, 0.25);
+  }
+  #historyCard h2 { font-size: 19px; color: #eef1ff; }
+  #histList {
+    overflow-y: auto;
+    max-height: 55vh;
+    display: flex; flex-direction: column;
+  }
+  .histRow {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 16px;
+    padding: 11px 2px;
+    border-bottom: 1px solid rgba(130, 150, 255, 0.15);
+  }
+  .histRow:last-child { border-bottom: none; }
+  .histHe { font-size: 20px; font-weight: 600; color: #eef1ff; }
+  .histEn { font-size: 17px; color: #7d88b8; direction: ltr; }
+  .histEmpty { color: #7d88b8; font-size: 16px; padding: 12px 0; }
+  #clearHist {
+    font-size: 15px;
+    padding: 10px;
+    border: 1px solid rgba(255, 138, 122, 0.4);
+    border-radius: 10px;
+    background: none;
+    color: #ff8a7a;
+    cursor: pointer;
+  }
   #settingsCard {
     background: #121838;
     border: 1px solid rgba(130, 150, 255, 0.3);
@@ -222,6 +259,7 @@
 <header>
   <button id="gear" aria-label="הגדרות">⚙︎</button>
   <h1>Einav's Partner</h1>
+  <button id="book" aria-label="המילים שלי">📖</button>
 </header>
 
 <div id="stage">
@@ -248,6 +286,14 @@
   </div>
   <div id="status">לחצי על המיקרופון ואמרי מילה באנגלית</div>
   <div id="debug"></div>
+</div>
+
+<div id="history">
+  <div id="historyCard">
+    <h2>המילים שלי <span id="histCount"></span></h2>
+    <div id="histList"></div>
+    <button id="clearHist">מחיקת כל המילים</button>
+  </div>
 </div>
 
 <div id="settings">
@@ -320,7 +366,7 @@ let useCloudSTT = localStorage.getItem('milon_stt') === 'cloud' || isStandalone;
 let sttModel = 'gpt-4o-mini-transcribe';
 let audioCtx = null;
 
-const VERSION = 'v4';
+const VERSION = 'v5';
 const debugEl = $('debug');
 function debug(m) { debugEl.textContent = VERSION + ' · ' + m; }
 debug(isStandalone ? 'standalone' : 'browser');
@@ -535,7 +581,7 @@ micBtn.addEventListener('click', () => {
 });
 
 async function handleWord(text) {
-  currentWord = text.trim();
+  currentWord = text.trim().replace(/[.?!,؟]+$/, '');
   englishEl.textContent = currentWord;
   state = 'translating';
   setMic('busy');
@@ -543,6 +589,7 @@ async function handleWord(text) {
   try {
     currentHebrew = await ask(SYS_TRANSLATE, currentWord, 200);
     hebrewEl.textContent = currentHebrew;
+    saveWord(currentWord, currentHebrew);
     state = 'speaking';
     speak(currentHebrew, startExpandWindow);
   } catch (e) {
@@ -586,6 +633,53 @@ async function doExpand() {
     setMic('');
   }
 }
+
+/* ---------- Word notebook ---------- */
+let history = [];
+try { history = JSON.parse(localStorage.getItem('milon_history')) || []; } catch (e) {}
+
+function saveWord(en, he) {
+  const k = en.toLowerCase();
+  history = history.filter(x => x.en.toLowerCase() !== k);
+  history.unshift({ en, he });
+  if (history.length > 1000) history.length = 1000;
+  localStorage.setItem('milon_history', JSON.stringify(history));
+}
+
+function openHistory() {
+  const list = $('histList');
+  list.innerHTML = '';
+  $('histCount').textContent = history.length ? '(' + history.length + ')' : '';
+  if (!history.length) {
+    const d = document.createElement('div');
+    d.className = 'histEmpty';
+    d.textContent = 'עוד אין מילים — אמרי מילה ראשונה!';
+    list.append(d);
+  }
+  history.forEach(x => {
+    const row = document.createElement('div');
+    row.className = 'histRow';
+    const he = document.createElement('div');
+    he.className = 'histHe';
+    he.textContent = x.he;
+    const en = document.createElement('div');
+    en.className = 'histEn';
+    en.textContent = x.en;
+    row.append(he, en);
+    list.append(row);
+  });
+  $('history').className = 'show';
+}
+$('book').addEventListener('click', openHistory);
+$('clearHist').addEventListener('click', () => {
+  if (!history.length || !confirm('למחוק את כל המילים?')) return;
+  history = [];
+  localStorage.setItem('milon_history', '[]');
+  openHistory();
+});
+$('history').addEventListener('click', e => {
+  if (e.target === $('history')) $('history').className = '';
+});
 
 /* ---------- Settings ---------- */
 function openSettings() {
