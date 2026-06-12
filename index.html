@@ -329,22 +329,34 @@ function stopListening() {
 }
 
 /* ---------- OpenAI ---------- */
+let goodVariant = 0; // remember which param combo this model accepts
 async function ask(system, user, maxTokens) {
-  const call = body => fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
-    body: JSON.stringify(body)
-  });
   const messages = [{ role: 'system', content: system }, { role: 'user', content: user }];
-  let r = await call({ model, messages, max_completion_tokens: maxTokens, reasoning_effort: 'minimal' });
-  if (r.status === 400) {
-    // older / different model families reject these params — retry plain
-    r = await call({ model, messages, max_tokens: maxTokens });
+  // different model families accept different params — walk the variants on 400
+  const variants = [
+    { model, messages, max_completion_tokens: maxTokens, reasoning_effort: 'minimal' },
+    { model, messages, max_completion_tokens: maxTokens },
+    { model, messages, max_tokens: maxTokens },
+    { model, messages }
+  ];
+  let lastMsg = '';
+  for (let i = goodVariant; i < variants.length; i++) {
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+      body: JSON.stringify(variants[i])
+    });
+    if (r.ok) {
+      goodVariant = i;
+      const j = await r.json();
+      return (j.choices[0].message.content || '').trim();
+    }
+    try { lastMsg = (await r.json()).error.message || ''; } catch (e) { lastMsg = ''; }
+    if (r.status === 401) throw new Error('מפתח API לא תקין — בדקי בהגדרות');
+    if (r.status === 404) throw new Error('המודל "' + model + '" לא נמצא — בדקי את שם המודל בהגדרות ⚙︎');
+    if (r.status !== 400) throw new Error('שגיאת API ' + r.status + (lastMsg ? ': ' + lastMsg : ''));
   }
-  if (r.status === 401) throw new Error('מפתח API לא תקין — בדקי בהגדרות');
-  if (!r.ok) throw new Error('שגיאת API (' + r.status + ')');
-  const j = await r.json();
-  return (j.choices[0].message.content || '').trim();
+  throw new Error('שגיאת API 400' + (lastMsg ? ': ' + lastMsg : ''));
 }
 
 /* ---------- Flow ---------- */
