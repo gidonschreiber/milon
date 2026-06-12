@@ -167,6 +167,14 @@
   }
   #status.hint { color: #8fd0ff; font-weight: 600; text-shadow: 0 0 16px rgba(90, 180, 255, 0.4); }
   #status.error { color: #ff8a7a; }
+  #debug {
+    font-size: 12px;
+    color: #3d4570;
+    direction: ltr;
+    min-height: 16px;
+    max-width: 480px;
+    word-break: break-word;
+  }
 
   /* settings panel */
   #settings {
@@ -239,6 +247,7 @@
     <div class="pulse"></div>
   </div>
   <div id="status">לחצי על המיקרופון ואמרי מילה באנגלית</div>
+  <div id="debug"></div>
 </div>
 
 <div id="settings">
@@ -311,6 +320,12 @@ let useCloudSTT = localStorage.getItem('milon_stt') === 'cloud' || isStandalone;
 let sttModel = 'gpt-4o-mini-transcribe';
 let audioCtx = null;
 
+const VERSION = 'v4';
+const debugEl = $('debug');
+function debug(m) { debugEl.textContent = VERSION + ' · ' + m; }
+debug(isStandalone ? 'standalone' : 'browser');
+window.addEventListener('error', e => debug('js error: ' + e.message));
+
 function ensureAudioCtx() {
   const AC = window.AudioContext || window.webkitAudioContext;
   if (!AC) return;
@@ -320,7 +335,8 @@ function ensureAudioCtx() {
 
 function listen(lang, opts) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (useCloudSTT || !SR) { cloudListen(lang, opts); return; }
+  if (useCloudSTT || !SR) { debug('cloud listen ' + lang); cloudListen(lang, opts); return; }
+  debug('native listen ' + lang);
   nativeListen(SR, lang, opts);
 }
 
@@ -339,6 +355,7 @@ function nativeListen(SR, lang, opts) {
     onResult(e.results[0][0].transcript || '');
   };
   rec.onerror = e => {
+    debug('sr error: ' + e.error);
     if (!got && (e.error === 'service-not-allowed' || e.error === 'audio-capture' || e.error === 'network')) {
       switched = true;
       useCloudSTT = true;
@@ -379,19 +396,23 @@ async function cloudListen(lang, { onResult, onMiss, timeout }) {
     cleanup();
     activeRec = null;
     if (aborted) return;
-    if (vadActive && !spoke) { onMiss && onMiss(); return; } // silence only — don't transcribe
+    if (vadActive && !spoke) { debug('no speech detected'); onMiss && onMiss(); return; }
     const blob = new Blob(chunks, { type: mime || 'audio/mp4' });
+    debug('recorded ' + Math.round(blob.size / 1024) + 'kb ' + (mime || 'default'));
     if (blob.size < 1500) { onMiss && onMiss(); return; }
+    setStatus('מתמללת...');
     try {
       const text = (await transcribe(blob, lang, mime)).trim();
+      debug('heard: ' + (text || '(empty)'));
       text ? onResult(text) : (onMiss && onMiss());
     } catch (e) {
+      debug('stt error: ' + e.message);
       setStatus(e.message, 'error');
       state = 'idle';
       setMic('');
     }
   };
-  mr.start();
+  mr.start(250); // chunked delivery — iOS can drop data on a single final flush
 
   // stop ~1s after she finishes speaking (when the audio level allows), else at timeout
   ensureAudioCtx();
@@ -429,7 +450,11 @@ async function transcribe(blob, lang, mime) {
   let r = await post(sttModel);
   if (!r.ok && sttModel !== 'whisper-1') { sttModel = 'whisper-1'; r = await post(sttModel); }
   if (r.status === 401) throw new Error('מפתח API לא תקין — בדקי בהגדרות');
-  if (!r.ok) throw new Error('שגיאת תמלול (' + r.status + ')');
+  if (!r.ok) {
+    let msg = '';
+    try { msg = (await r.json()).error.message || ''; } catch (e) {}
+    throw new Error('שגיאת תמלול (' + r.status + ') ' + msg);
+  }
   return (await r.json()).text || '';
 }
 
@@ -497,7 +522,14 @@ micBtn.addEventListener('click', () => {
   setStatus('מקשיבה... אמרי מילה באנגלית');
   listen('en-US', {
     onResult: handleWord,
-    onMiss: () => { if (state === 'listening') reset(); },
+    onMiss: () => {
+      if (state === 'listening') {
+        stopListening();
+        state = 'idle';
+        setMic('');
+        setStatus('לא שמעתי מילה — נסי שוב', 'error');
+      }
+    },
     timeout: 8000
   });
 });
